@@ -29,3 +29,31 @@ app.include_router(blog.router)
 @app.get("/")
 def health():
     return {"status": "ok", "api": "Redemption Makosa Portfolio API v1.0"}
+    
+from pydantic import BaseModel
+import resend
+import os
+
+resend.api_key = os.getenv("RESEND_API_KEY")
+
+class ContactForm(BaseModel):
+    name: str
+    email: str
+    message: str
+
+@app.post("/contact")
+async def send_contact(form: ContactForm):
+
+    resend.Emails.send({
+        "from": os.getenv("EMAIL_FROM"),
+        "to": os.getenv("EMAIL_TO"),
+        "subject": f"Portfolio Message from {form.name}",
+        "html": f"""
+        <p><b>Name:</b> {form.name}</p>
+        <p><b>Email:</b> {form.email}</p>
+        <p><b>Message:</b></p>
+        <p>{form.message}</p>
+        """
+    })
+
+    return {"status": "sent"}
