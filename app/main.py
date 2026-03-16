@@ -14,7 +14,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[s.frontend_url, "http://localhost:3000", "http://127.0.0.1:5500"],
+    allow_origins=["https://portfolio-frontend-gules-nine.vercel.app", "http://localhost:3000", "http://127.0.0.1:5500"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,6 +39,7 @@ resend.api_key = os.getenv("RESEND_API_KEY")
 class ContactForm(BaseModel):
     name: str
     email: str
+    subject: str
     message: str
 
 @app.post("/contact")
