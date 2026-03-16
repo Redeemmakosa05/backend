@@ -45,16 +45,24 @@ class ContactForm(BaseModel):
 @app.post("/contact")
 async def send_contact(form: ContactForm):
 
-    resend.Emails.send({
-        "from": os.getenv("EMAIL_FROM"),
-        "to": os.getenv("EMAIL_TO"),
-        "subject": f"Portfolio Message from {form.name}",
-        "html": f"""
-        <p><b>Name:</b> {form.name}</p>
-        <p><b>Email:</b> {form.email}</p>
-        <p><b>Message:</b></p>
-        <p>{form.message}</p>
-        """
-    })
+    try:
+        resend.Emails.send({
+            "from": os.getenv("EMAIL_FROM"),
+            "to": os.getenv("EMAIL_TO"),
+            "subject": f"{form.subject} — from {form.name}",
+            "reply_to": form.email,
+            "html": f"""
+            <h3>New Portfolio Message</h3>
+            <p><b>Name:</b> {form.name}</p>
+            <p><b>Email:</b> {form.email}</p>
+            <p><b>Subject:</b> {form.subject}</p>
+            <p><b>Message:</b></p>
+            <p>{form.message}</p>
+            """
+        })
 
-    return {"status": "sent"}
+        return {"status": "sent"}
+
+    except Exception as e:
+        print("EMAIL ERROR:", str(e))
+        return {"status": "error", "detail": str(e)}
