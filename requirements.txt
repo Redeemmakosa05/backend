@@ -44,7 +44,7 @@ python-multipart==0.0.9
 PyYAML==6.0.3
 realtime==1.0.6
 requests==2.31.0
-resend==0.8.0
+resend==2.3.0
 rich==14.3.3
 rich-toolkit==0.19.7
 rsa==4.9.1
