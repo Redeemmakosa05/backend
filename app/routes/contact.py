@@ -1,59 +1,58 @@
-from fastapi import APIRouter, HTTPException, Depends
-from app.models import ContactMessage, ContactResponse
-from app.database import get_db
-from app.config import get_settings
-from app.routes.auth import verify_token
+# app/routes/contact.py
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, EmailStr
 import resend
-import uuid
-from datetime import datetime
+import os
 
-router = APIRouter(prefix="/contact", tags=["contact"])
+router = APIRouter()
 
 
-@router.post("", response_model=ContactResponse)
-async def send_message(body: ContactMessage):
-    s = get_settings()
-    db = get_db()
+class ContactForm(BaseModel):
+    name: str
+    email: EmailStr
+    subject: str
+    message: str
 
-    # Store in Supabase
-    row = {
-        "id": str(uuid.uuid4()),
-        "name": body.name,
-        "email": body.email,
-        "subject": body.subject,
-        "message": body.message,
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    result = db.table("contact_messages").insert(row).execute()
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to save message")
 
-    # Send email via Resend
+@router.post("/contact")
+async def send_contact(form: ContactForm):
+    api_key = os.getenv("RESEND_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="RESEND_API_KEY not set on server"
+        )
+
+    resend.api_key = api_key  # set per-request so it picks up env var at runtime
+
+    email_from = os.getenv("EMAIL_FROM")
+    email_to = os.getenv("EMAIL_TO")
+
+    if not email_from or not email_to:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="EMAIL_FROM or EMAIL_TO not configured on server"
+        )
+
     try:
-        resend.api_key = s.resend_api_key
-        resend.Emails.send({
-            "from": s.email_from,
-            "to": s.email_to,
-            "subject": f"Portfolio Contact: {body.subject}",
-            "html": f"""
-                <h2>New message from your portfolio</h2>
-                <p><strong>Name:</strong> {body.name}</p>
-                <p><strong>Email:</strong> {body.email}</p>
-                <p><strong>Subject:</strong> {body.subject}</p>
-                <hr/>
-                <p>{body.message.replace(chr(10), '<br/>')}</p>
-            """
+        resp = resend.Emails.send({
+            "from": email_from,
+            "to": email_to,
+            "subject": f"{form.subject} — from {form.name}",
+            "reply_to": form.email,
+            "html": (
+                f"<h3>New Portfolio Message</h3>"
+                f"<p><b>Name:</b> {form.name}</p>"
+                f"<p><b>Email:</b> {form.email}</p>"
+                f"<p><b>Subject:</b> {form.subject}</p>"
+                f"<p><b>Message:</b></p>"
+                f"<p>{form.message}</p>"
+            ),
         })
+        return {"status": "sent", "id": resp.get("id") if isinstance(resp, dict) else str(resp)}
     except Exception as e:
-        # Email failure shouldn't break the response — message is already saved
-        print(f"Email send failed: {e}")
-
-    return ContactResponse(id=row["id"], created_at=row["created_at"])
-
-
-@router.get("", dependencies=[Depends(verify_token)])
-def get_messages():
-    """Admin only — get all contact messages."""
-    db = get_db()
-    result = db.table("contact_messages").select("*").order("created_at", desc=True).execute()
-    return result.data
+        print("EMAIL ERROR:", repr(e))  # appears in Railway logs
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Email provider error: {repr(e)}"
+        )
